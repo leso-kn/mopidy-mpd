@@ -20,7 +20,8 @@ class _config:
         
         _config.image_dir = local_ext.get_image_dir(_config.config)
         logger.debug("Local image directory: %s", str(_config.image_dir))
-
+        
+        logger.info("Test config: " + str(_config.config["mpd"]["port"]))
 
 def _get_art_uri(context, uri):
     # Get art uri from backend libraries
@@ -50,7 +51,6 @@ def _get_art_uri(context, uri):
             logger.debug("Found image uri in library: %s", str(image_uri))
     return image_uri
 
-
 def _search_uri(context, uri):
     # Request image uri from backend libraries
 
@@ -63,9 +63,13 @@ def _search_uri(context, uri):
         # Note an album uri is encrypted and MD5 hashed
     return album_uri
 
-
 def _get_local_art_uri(context, uri):
-    # Translate local extension image uri value to absolute file path
+    # Add scheme prefix to uri value retrieved from local extension
+    # database queuery.
+    # Use 'file:' scheme and prepend absolute file path so images are fetch
+    # directly from the filesystem.
+    # Alternative was to use 'HTTP:' scheme and hostname prefix to fetch images
+    # via the local extension HTTP service, but this requires HHTP to be enabled.
 
     art_uri = ""
 
@@ -115,7 +119,6 @@ def albumart(context, uri, offset):
         if not art_uri:
             # Attempt to find art via a library uri search
             # Applicable when an MPD client supplies only the album part of a uri
-
             album_uri = _search_uri(context, uri)
             
             if album_uri:
@@ -124,14 +127,13 @@ def albumart(context, uri, offset):
                 uri_scheme = urisplit(uri).scheme
                 if uri_scheme == "http" or uri_scheme == "https":
                     # As a last resort, allow external web searches (incl. internet)
-
                     art_uri = uri
                 else:
                     logger.debug("Can't find album art for uri: %s", str(uri))
                     return b"binary: 0\n"
 
         if art_uri.find("local", 1, 7) != -1:
-            # For images obtained from local backend translate file path to uri          
+            # For images from local backend translate file path to full uri          
             art_uri = _get_local_art_uri(context, art_uri)
 
         try:
