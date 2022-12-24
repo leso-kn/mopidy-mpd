@@ -1,12 +1,25 @@
 import logging
 from mopidy_mpd import protocol
-from urllib.request import urlopen
-import uritools
-import pathlib
+from urllib.request import urlopen, ProxyHandler
+from uritools import isuri, urisplit
+from pathlib import PurePath
 
 logger = logging.getLogger(__name__)
 
 cover_cache = {}
+
+
+class _config:
+    config = {}
+    image_dir = ""
+    
+    def load_config(context):
+        from mopidy_local import Extension as local_ext
+        _config.config = context.dispatcher.config
+        logger.debug("Loaded config: %s", str(_config.config))
+        
+        _config.image_dir = local_ext.get_image_dir(_config.config)
+        logger.debug("Local image directory: %s", str(_config.image_dir))
 
 
 def _get_art_uri(context, uri):
@@ -53,15 +66,10 @@ def _search_uri(context, uri):
 
 def _get_local_art_uri(context, uri):
     # Translate local extension image uri value to absolute file path
-    
-    from mopidy_local import Extension as local_ext
 
     art_uri = ""
 
-    image_dir = local_ext.get_image_dir(context.dispatcher.config)
-    logger.debug("Local image directory: %s", str(image_dir))
-
-    art_uri = pathlib.PurePath(image_dir).joinpath(pathlib.PurePath(uri).name).as_uri()
+    art_uri = PurePath(_config.image_dir).joinpath(PurePath(uri).name).as_uri()
     logger.debug("Local art filename: %s", str(art_uri))
     return art_uri
 
@@ -95,9 +103,12 @@ def albumart(context, uri, offset):
 
     logger.debug("Album art request for uri: %s", str(uri))
 
-    if not uritools.isuri(uri):
+    if not isuri(uri):
         logger.debug("Not a valid uri: %s", str(uri))
         return b"binary: 0\n"
+
+    if not _config.config:
+        _config.load_config(context)
 
     if uri not in cover_cache:
         art_uri = _get_art_uri(context, uri)
@@ -110,7 +121,7 @@ def albumart(context, uri, offset):
             if album_uri:
                 art_uri = _get_art_uri(context, album_uri)
             if not art_uri:
-                uri_scheme = uritools.urisplit(uri).scheme
+                uri_scheme = urisplit(uri).scheme
                 if uri_scheme == "http" or uri_scheme == "https":
                     # As a last resort, allow external web searches (incl. internet)
 
@@ -120,11 +131,12 @@ def albumart(context, uri, offset):
                     return b"binary: 0\n"
 
         if art_uri.find("local", 1, 7) != -1:
-            # For images obtained from local backend translate file path to uri
-
+            # For images obtained from local backend translate file path to uri          
             art_uri = _get_local_art_uri(context, art_uri)
 
         try:
+            # The uri of local files uses the 'file:' scheme. urllib reads
+            # these files from the filesystem and not via Mopidy HTTP
             cover_cache[uri] = urlopen(art_uri).read()
         except:
             logger.debug("Can't open uri: %s", art_uri)
