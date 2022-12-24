@@ -20,8 +20,6 @@ class _config:
         
         _config.image_dir = local_ext.get_image_dir(_config.config)
         logger.debug("Local image directory: %s", str(_config.image_dir))
-        
-        logger.info("Test config: " + str(_config.config["mpd"]["port"]))
 
 def _get_art_uri(context, uri):
     # Get art uri from backend libraries
