@@ -1,7 +1,7 @@
 import logging
 from mopidy_mpd import protocol
-from urllib.request import urlopen, ProxyHandler
-from uritools import isuri, urisplit
+from urllib.request import urlopen
+from urllib.parse import urlparse
 from pathlib import PurePath
 
 logger = logging.getLogger(__name__)
@@ -12,14 +12,16 @@ cover_cache = {}
 class _config:
     config = {}
     image_dir = ""
-    
+
     def load_config(context):
         from mopidy_local import Extension as local_ext
+
         _config.config = context.dispatcher.config
         logger.debug("Loaded config: %s", str(_config.config))
-        
+
         _config.image_dir = local_ext.get_image_dir(_config.config)
         logger.debug("Local image directory: %s", str(_config.image_dir))
+
 
 def _get_art_uri(context, uri):
     # Get art uri from backend libraries
@@ -49,6 +51,7 @@ def _get_art_uri(context, uri):
             logger.debug("Found image uri in library: %s", str(image_uri))
     return image_uri
 
+
 def _search_uri(context, uri):
     # Request image uri from backend libraries
 
@@ -61,6 +64,7 @@ def _search_uri(context, uri):
         # Note an album uri is encrypted and MD5 hashed
     return album_uri
 
+
 def _get_local_art_uri(context, uri):
     # Add scheme prefix to uri value retrieved from local extension
     # database queuery.
@@ -71,6 +75,9 @@ def _get_local_art_uri(context, uri):
 
     art_uri = ""
 
+    if not _config.config:
+        _config.load_config(context)
+
     art_uri = PurePath(_config.image_dir).joinpath(PurePath(uri).name).as_uri()
     logger.debug("Local art filename: %s", str(art_uri))
     return art_uri
@@ -80,21 +87,27 @@ def _get_local_art_uri(context, uri):
 def albumart(context, uri, offset):
     """
     *musicpd.org, the music database section:*
+
         ``albumart {URI} {OFFSET}``
+
         Locate album art for the given song and return a chunk
         of an album art image file at offset OFFSET.
+
         This is currently implemented by searching the directory
         the file resides in for a file called cover.png, cover.jpg,
         cover.tiff or cover.bmp.
+
         Returns the file size and actual number of bytes read at
         the requested offset, followed by the chunk requested as
         raw bytes (see Binary Responses), then a newline and the completion code.
+
         Example::
             albumart foo/bar.ogg 0
             size: 1024768
             binary: 8192
             <8192 bytes>
             OK
+
     .. versionadded:: 0.21
         New in MPD protocol version 0.21.0
         Major improvement in MPD  protocol version 0.21.11
@@ -105,12 +118,9 @@ def albumart(context, uri, offset):
 
     logger.debug("Album art request for uri: %s", str(uri))
 
-    if not isuri(uri):
+    if uri.find(":") < 0:
         logger.debug("Not a valid uri: %s", str(uri))
         return b"binary: 0\n"
-
-    if not _config.config:
-        _config.load_config(context)
 
     if uri not in cover_cache:
         art_uri = _get_art_uri(context, uri)
@@ -118,11 +128,11 @@ def albumart(context, uri, offset):
             # Attempt to find art via a library uri search
             # Applicable when an MPD client supplies only the album part of a uri
             album_uri = _search_uri(context, uri)
-            
+
             if album_uri:
                 art_uri = _get_art_uri(context, album_uri)
             if not art_uri:
-                uri_scheme = urisplit(uri).scheme
+                uri_scheme = urlparse(uri).scheme
                 if uri_scheme == "http" or uri_scheme == "https":
                     # As a last resort, allow external web searches (incl. internet)
                     art_uri = uri
@@ -131,14 +141,14 @@ def albumart(context, uri, offset):
                     return b"binary: 0\n"
 
         if art_uri.find("local", 1, 7) != -1:
-            # For images from local backend translate file path to full uri          
+            # For images from local backend translate file path to full uri
             art_uri = _get_local_art_uri(context, art_uri)
 
         try:
             # The uri of local files uses the 'file:' scheme. urllib reads
             # these files from the filesystem and not via Mopidy HTTP
             cover_cache[uri] = urlopen(art_uri).read()
-        except:
+        except Exception:
             logger.debug("Can't open uri: %s", art_uri)
             return b"binary: 0\n"
 
@@ -164,17 +174,23 @@ def albumart(context, uri, offset):
 def readpicture(context, uri, offset):
     """
     *musicpd.org, the music database section:*
+
         ``readpicture {URI} {OFFSET}``
+
         Locate a picture for the given song and return a chunk
         of the image file at offset OFFSET. This is usually
         implemented by reading embedded pictures from
         binary tags (e.g. ID3v2's APIC tag).
+
         Returns the following values:
+
         * size: the total file size
         * type: the file's MIME type (optional)
         * binary: see Binary Responses
+
         If the song file was recognized, but there is no picture,
         the response is successful, but is otherwise empty.
+
         Example::
             readpicture foo/bar.ogg 0
             size: 1024768
@@ -182,6 +198,7 @@ def readpicture(context, uri, offset):
             binary: 8192
             <8192 bytes>
             OK
+
     .. versionadded:: 0.21
         New in MPD protocol version 0.21
     """

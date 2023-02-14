@@ -25,7 +25,7 @@ class AlbumArtTest(protocol.BaseTestCase):
 
         self.core.playback.play().get()
 
-        self.send_request("albumart /home/test/music.flac 0")
+        self.send_request("albumart file:///home/test/music.flac 0")
         self.assertInResponse("binary: 0")
 
     @mock.patch.object(
@@ -48,6 +48,6 @@ class AlbumArtTest(protocol.BaseTestCase):
         with mock.patch.object(
             album_art, "urlopen", return_value=BytesIO(expected)
         ):
-            self.send_request("albumart /home/test/music.flac 0")
+            self.send_request("albumart file:///home/test/music.flac 0")
 
         self.assertInResponse("binary: " + str(len(expected)))
