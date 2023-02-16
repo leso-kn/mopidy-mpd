@@ -118,12 +118,17 @@ def albumart(context, uri, offset):
 
     logger.debug("Album art request for uri: %s", str(uri))
 
-    if uri.find(":") < 0:
+    if uri.find(":") < 0 and uri.find("/local/") != 0:
         logger.debug("Not a valid uri: %s", str(uri))
         return b"binary: 0\n"
 
     if uri not in cover_cache:
-        art_uri = _get_art_uri(context, uri)
+        if uri.find("/local/") == 0:
+            # For images from local backend translate file path to full uri
+            art_uri = _get_local_art_uri(context, art_uri)
+        else:
+            art_uri = _get_art_uri(context, uri)
+
         if not art_uri:
             # Attempt to find art via a library uri search
             # Applicable when an MPD client supplies only the album part of a uri
@@ -139,10 +144,6 @@ def albumart(context, uri, offset):
                 else:
                     logger.debug("Can't find album art for uri: %s", str(uri))
                     return b"binary: 0\n"
-
-        if art_uri.find("local", 1, 7) != -1:
-            # For images from local backend translate file path to full uri
-            art_uri = _get_local_art_uri(context, art_uri)
 
         try:
             # The uri of local files uses the 'file:' scheme. urllib reads
